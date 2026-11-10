@@ -1,0 +1,18 @@
+# Сборка - публикуется в GitHub Releases, не в репозиторий
+*.exe
+*.exe.new
+*.exe.old
+*.pdb
+
+# Личные данные: настройки (логин, пароль, узлы) и журнал
+RadminGrid.settings.xml
+RadminGrid.settings.xml.*
+RadminGrid.settings.log
+*.log
+*.rpb
+
+# Прочее
+.rg_write_test
+dist/
+.vs/
+Thumbs.db

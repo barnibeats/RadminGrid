@@ -1,0 +1,69 @@
+name: Release
+
+# Выпуск версии: поднять версию в src/AssemblyInfo.cs, дописать CHANGELOG.md,
+# затем  git tag v0.1.5 && git push origin v0.1.5
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check tag matches AssemblyVersion
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = ($tag -replace '^v', '') -replace '[-+].*$', ''
+          $src = Get-Content src/AssemblyInfo.cs -Raw
+          if ($src -notmatch 'AssemblyVersion\("(\d+)\.(\d+)\.(\d+)') { throw "AssemblyVersion не найден" }
+          $asm = "$($Matches[1]).$($Matches[2]).$($Matches[3])"
+          if ($asm -ne $ver) { throw "Тег $tag не совпадает с версией в src/AssemblyInfo.cs ($asm)" }
+          "VERSION=$ver" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build RadminGrid.exe
+        shell: cmd
+        run: build.bat
+
+      - name: Verify build and write checksums
+        shell: pwsh
+        run: |
+          $an = [Reflection.AssemblyName]::GetAssemblyName("$PWD\RadminGrid.exe")
+          $built = "$($an.Version.Major).$($an.Version.Minor).$($an.Version.Build)"
+          if ($built -ne $env:VERSION) { throw "Собранный exe имеет версию $built, ожидалась $env:VERSION" }
+          $hash = (Get-FileHash RadminGrid.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  RadminGrid.exe" | Out-File SHA256SUMS.txt -Encoding ascii -NoNewline
+          Get-Content SHA256SUMS.txt
+
+      - name: Release notes from CHANGELOG.md
+        shell: pwsh
+        run: |
+          $notes = ""
+          if (Test-Path CHANGELOG.md) {
+            $lines = Get-Content CHANGELOG.md -Encoding utf8
+            $in = $false
+            foreach ($l in $lines) {
+              if ($l -match '^## ') {
+                if ($in) { break }
+                $in = $l -match "^## \[?v?$([regex]::Escape($env:VERSION))\]?"
+                continue
+              }
+              if ($in) { $notes += "$l`n" }
+            }
+          }
+          if (-not $notes.Trim()) { $notes = "Radmin Grid v$env:VERSION" }
+          $notes.Trim() | Out-File notes.md -Encoding utf8
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $pre = if ($tag -match '-') { '--prerelease' } else { '--latest' }
+          gh release create $tag RadminGrid.exe SHA256SUMS.txt --title "Radmin Grid $tag" --notes-file notes.md $pre

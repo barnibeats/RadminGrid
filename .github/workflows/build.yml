@@ -1,0 +1,27 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build RadminGrid.exe
+        shell: cmd
+        run: build.bat
+
+      - name: Show version
+        shell: pwsh
+        run: '[Reflection.AssemblyName]::GetAssemblyName("$PWD\RadminGrid.exe").Version'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RadminGrid-${{ github.sha }}
+          path: RadminGrid.exe
+          retention-days: 14
